@@ -12,20 +12,27 @@
 #define MAX_PATTERN_LEN 256
 #define MAX_OUTPUT_LINES 1000
 #define MAX_LINE_LEN 512
-#define TYPING_DELAY_MS 500
+#define TYPING_DELAY_MS 250
+
+#define ANSI_CLEAR_SCREEN "\033[H\033[J"
+#define ANSI_GOTO_POS "\033[%d;%dH"
+#define ANSI_CLEAR_LINE "\033[K"
+#define ANSI_HORIZONTAL_LINE "─"
+
 
 typedef struct {
-    WINDOW *output_win;
     WINDOW *input_win;
-    int output_height;
     int input_height;
     int width;
+    int height;
 } ui_context_t;
 
 typedef struct {
     char lines[MAX_OUTPUT_LINES][MAX_LINE_LEN];
     int count;
     int display_start;
+    int last_displayed_count;
+    int needs_full_redraw;
 } output_buffer_t;
 
 typedef struct {
@@ -85,14 +92,11 @@ void init_ui(ui_context_t *ui) {
     keypad(stdscr, TRUE);
     nodelay(stdscr, TRUE);
     
-    getmaxyx(stdscr, ui->output_height, ui->width);
+    getmaxyx(stdscr, ui->height, ui->width);
     ui->input_height = 3;
-    ui->output_height -= ui->input_height;
     
-    ui->output_win = newwin(ui->output_height, ui->width, 0, 0);
-    ui->input_win = newwin(ui->input_height, ui->width, ui->output_height, 0);
+    ui->input_win = newwin(ui->input_height, ui->width, ui->height - ui->input_height, 0);
     
-    scrollok(ui->output_win, TRUE);
     keypad(ui->input_win, TRUE);
     nodelay(ui->input_win, TRUE);
 }
@@ -111,24 +115,53 @@ void cleanup_ui(void) {
  * Handles display of results that exceed the output pane size by showing most recent lines
  */
 void draw_ui(ui_context_t *ui, const char *pattern, output_buffer_t *output) {
-    werase(ui->output_win);
-    werase(ui->input_win);
-    
-    box(ui->output_win, 0, 0);
-    box(ui->input_win, 0, 0);
-    
-    int display_lines = ui->output_height - 2;
+    int display_lines = ui->height - ui->input_height - 1;
     int start_line = (output->count > display_lines) ? output->count - display_lines : 0;
     
-    for (int i = 0; i < output->count && i < display_lines; i++) {
-        int line_idx = start_line + i;
-        mvwprintw(ui->output_win, i + 1, 1, "%.80s", output->lines[line_idx]);
+    if (output->needs_full_redraw) {
+        printf(ANSI_CLEAR_SCREEN);
+        
+        for (int i = 0; i < output->count && i < display_lines; i++) {
+            int line_idx = start_line + i;
+            printf(ANSI_GOTO_POS "%s\n", i + 1, 1, output->lines[line_idx]);
+        }
+        
+        output->needs_full_redraw = 0;
+        output->last_displayed_count = output->count;
+    } else if (output->count > output->last_displayed_count) {
+        int lines_to_add = output->count - output->last_displayed_count;
+        
+        if (lines_to_add >= display_lines) {
+            printf(ANSI_GOTO_POS, 1, 1);
+            for (int i = 0; i < display_lines; i++) {
+                int line_idx = start_line + i;
+                printf(ANSI_CLEAR_LINE "%s\n", output->lines[line_idx]);
+            }
+        } else {
+            for (int i = output->last_displayed_count; i < output->count; i++) {
+                if (i - start_line >= 0 && i - start_line < display_lines) {
+                    int display_row = (i - start_line) + 1;
+                    printf(ANSI_GOTO_POS "%s\n", display_row, 1, output->lines[i]);
+                }
+            }
+        }
+        
+        output->last_displayed_count = output->count;
     }
     
-    mvwprintw(ui->input_win, 1, 1, "> %s", pattern);
+    printf(ANSI_GOTO_POS, ui->height - ui->input_height + 1, 1);
+    printf(ANSI_CLEAR_LINE);
+    for (int i = 0; i < ui->width; i++) {
+        printf(ANSI_HORIZONTAL_LINE);
+    }
+    printf(ANSI_GOTO_POS ANSI_CLEAR_LINE "> %s", ui->height - ui->input_height + 2, 1, pattern);
     
-    wrefresh(ui->output_win);
+    werase(ui->input_win);
+    box(ui->input_win, 0, 0);
+    mvwprintw(ui->input_win, 1, 1, "> %s", pattern);
     wrefresh(ui->input_win);
+    
+    fflush(stdout);
 }
 
 /**
@@ -144,6 +177,7 @@ void execute_grep(const char *pattern, output_buffer_t *output, grep_state_t *gr
     kill_current_grep(grep_state);
     
     output->count = 0;
+    output->needs_full_redraw = 1;
     
     int pipefd[2];
     if (pipe(pipefd) == -1) {
@@ -163,7 +197,7 @@ void execute_grep(const char *pattern, output_buffer_t *output, grep_state_t *gr
         dup2(pipefd[1], STDERR_FILENO);
         close(pipefd[1]);
         
-        execlp("grep", "grep", "-rn", pattern, ".", NULL);
+        execlp("grep", "grep", "-rn", "--color=always", pattern, ".", NULL);
         exit(1);
     } else {
         grep_state->current_grep_pid = pid;
@@ -286,3 +320,4 @@ int should_execute_grep(const char *pattern, grep_state_t *grep_state) {
     
     return 0;
 }
+
