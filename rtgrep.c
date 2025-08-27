@@ -8,16 +8,12 @@
 #include <signal.h>
 #include <time.h>
 #include <sys/time.h>
+#include "ansi.h"
 
 #define MAX_PATTERN_LEN 256
 #define MAX_OUTPUT_LINES 1000
 #define MAX_LINE_LEN 512
 #define TYPING_DELAY_MS 250
-
-#define ANSI_CLEAR_SCREEN "\033[H\033[J"
-#define ANSI_GOTO_POS "\033[%d;%dH"
-#define ANSI_CLEAR_LINE "\033[K"
-#define ANSI_HORIZONTAL_LINE "─"
 
 
 typedef struct {
