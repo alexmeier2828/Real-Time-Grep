@@ -47,7 +47,8 @@ void init_ui(ui_context_t *ui);
 void cleanup_ui(void);
 void draw_ui(ui_context_t *ui, const char *pattern, output_buffer_t *output);
 void execute_grep(const char *pattern, output_buffer_t *output, grep_state_t *grep_state);
-int handle_input(ui_context_t *ui, char *pattern, grep_state_t *grep_state);
+void grep_process(int pipefd[2], const char pattern[]);
+int handle_input(char *pattern, grep_state_t *grep_state);
 void kill_current_grep(grep_state_t *grep_state);
 int should_execute_grep(const char *pattern, grep_state_t *grep_state);
 void update_keypress_time(grep_state_t *grep_state);
@@ -71,7 +72,7 @@ int main(void) {
             execute_grep(pattern, &output, &grep_state);
         }
         
-        if (handle_input(&ui, pattern, &grep_state) == -1) {
+        if (handle_input(pattern, &grep_state) == -1) {
             break;
         }
         
@@ -205,19 +206,15 @@ void execute_grep(const char *pattern, output_buffer_t *output, grep_state_t *gr
     
     pid_t pid = fork();
     if (pid == -1) {
+        // Fork failed 
         close(pipefd[0]);
         close(pipefd[1]);
+        printf("Failed to fork process!");
         return;
     }
     
     if (pid == 0) {
-        close(pipefd[0]);
-        dup2(pipefd[1], STDOUT_FILENO);
-        dup2(pipefd[1], STDERR_FILENO);
-        close(pipefd[1]);
-        
-        execlp("grep", "grep", "-rn", "--color=always", pattern, ".", NULL);
-        exit(1);
+        grep_process(pipefd, pattern);
     } else {
         grep_state->current_grep_pid = pid;
         close(pipefd[1]);
@@ -251,12 +248,25 @@ void execute_grep(const char *pattern, output_buffer_t *output, grep_state_t *gr
 }
 
 /**
+ * This function represents the child process that will run the grep command specified by the user
+ */
+void grep_process(int pipefd[2], const char pattern[]){
+    close(pipefd[0]);
+    dup2(pipefd[1], STDOUT_FILENO); // duplicate file descriptor of stdout and err 
+    dup2(pipefd[1], STDERR_FILENO); // to the input side of the pipe
+    close(pipefd[1]);
+    
+    execlp("grep", "grep", "-rn", "--color=always", pattern, ".", NULL);
+    exit(1);
+}
+
+/**
  * Handles keyboard input from the user in the input field
  * Processes character input, backspace, Enter key, and ESC key
  * Returns -1 when user wants to exit (ESC), 0 otherwise
  * Triggers grep execution when Enter is pressed
  */
-int handle_input(ui_context_t *ui, char *pattern, grep_state_t *grep_state) {
+int handle_input(char *pattern, grep_state_t *grep_state) {
     int ch = getch();
     int pattern_len = strlen(pattern);
     int pattern_changed = 0;
