@@ -21,10 +21,12 @@
 
 
 typedef struct {
-    WINDOW *input_win;
     int input_height;
     int width;
     int height;
+    char last_pattern[MAX_PATTERN_LEN];
+    int separator_drawn;
+    int input_needs_refresh;
 } ui_context_t;
 
 typedef struct {
@@ -64,7 +66,6 @@ int main(void) {
     init_ui(&ui);
     
     while (1) {
-        draw_ui(&ui, pattern, &output);
         
         if (should_execute_grep(pattern, &grep_state)) {
             execute_grep(pattern, &output, &grep_state);
@@ -73,6 +74,8 @@ int main(void) {
         if (handle_input(&ui, pattern, &grep_state) == -1) {
             break;
         }
+        
+        draw_ui(&ui, pattern, &output);
     }
     
     kill_current_grep(&grep_state);
@@ -94,11 +97,10 @@ void init_ui(ui_context_t *ui) {
     
     getmaxyx(stdscr, ui->height, ui->width);
     ui->input_height = 3;
-    
-    ui->input_win = newwin(ui->input_height, ui->width, ui->height - ui->input_height, 0);
-    
-    keypad(ui->input_win, TRUE);
-    nodelay(ui->input_win, TRUE);
+    ui->last_pattern[0] = '\0';
+    ui->last_pattern[1] = '?'; // Ensure it won't match empty pattern initially
+    ui->separator_drawn = 0;
+    ui->input_needs_refresh = 1;
 }
 
 /**
@@ -128,6 +130,8 @@ void draw_ui(ui_context_t *ui, const char *pattern, output_buffer_t *output) {
         
         output->needs_full_redraw = 0;
         output->last_displayed_count = output->count;
+        ui->separator_drawn = 0;
+        ui->input_needs_refresh = 1;
     } else if (output->count > output->last_displayed_count) {
         int lines_to_add = output->count - output->last_displayed_count;
         
@@ -149,17 +153,32 @@ void draw_ui(ui_context_t *ui, const char *pattern, output_buffer_t *output) {
         output->last_displayed_count = output->count;
     }
     
-    printf(ANSI_GOTO_POS, ui->height - ui->input_height + 1, 1);
-    printf(ANSI_CLEAR_LINE);
-    for (int i = 0; i < ui->width; i++) {
-        printf(ANSI_HORIZONTAL_LINE);
+    if (!ui->separator_drawn) {
+        printf(ANSI_GOTO_POS, ui->height - 2, 1);
+        printf(ANSI_CLEAR_LINE);
+        for (int i = 0; i < ui->width; i++) {
+            printf(ANSI_HORIZONTAL_LINE);
+        }
+        ui->separator_drawn = 1;
     }
-    printf(ANSI_GOTO_POS ANSI_CLEAR_LINE "> %s", ui->height - ui->input_height + 2, 1, pattern);
     
-    werase(ui->input_win);
-    box(ui->input_win, 0, 0);
-    mvwprintw(ui->input_win, 1, 1, "> %s", pattern);
-    wrefresh(ui->input_win);
+    if (strcmp(ui->last_pattern, pattern) != 0 || ui->input_needs_refresh) {
+        strncpy(ui->last_pattern, pattern, MAX_PATTERN_LEN - 1);
+        ui->last_pattern[MAX_PATTERN_LEN - 1] = '\0';
+        ui->input_needs_refresh = 0;
+        
+        // Draw input buffer with ANSI escape sequences only when needed
+        // Use only 2 lines: separator and input line
+        printf(ANSI_GOTO_POS, ui->height - 1, 1);
+        printf(ANSI_CLEAR_LINE);
+        printf("| > %s", pattern);
+        // Fill remaining space 
+        int used_chars = 4 + strlen(pattern); // "| > " + pattern
+        for (int i = used_chars; i < ui->width - 1; i++) {
+            printf(" ");
+        }
+        printf("|");
+    }
     
     fflush(stdout);
 }
@@ -238,7 +257,7 @@ void execute_grep(const char *pattern, output_buffer_t *output, grep_state_t *gr
  * Triggers grep execution when Enter is pressed
  */
 int handle_input(ui_context_t *ui, char *pattern, grep_state_t *grep_state) {
-    int ch = wgetch(ui->input_win);
+    int ch = getch();
     int pattern_len = strlen(pattern);
     int pattern_changed = 0;
     
