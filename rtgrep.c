@@ -13,7 +13,7 @@
 #define MAX_PATTERN_LEN 256
 #define MAX_OUTPUT_LINES 1000
 #define MAX_LINE_LEN 512
-#define TYPING_DELAY_MS 250
+#define TYPING_DELAY_MS 10
 
 
 typedef struct {
@@ -38,6 +38,10 @@ typedef struct {
     struct timeval last_keypress_time;
     int timer_active;
 } grep_state_t;
+
+// globals for saving stdout so we can use it after we finish
+static FILE *tty_file = NULL;
+static int original_stdout = -1;
 
 void init_ui(ui_context_t *ui);
 void cleanup_ui(void);
@@ -86,12 +90,26 @@ int main(void) {
  * Configures ncurses settings for proper input handling and display
  */
 void init_ui(ui_context_t *ui) {
+
+    //save original stdout 
+    original_stdout = dup(STDOUT_FILENO);
+    tty_file = fopen("/dev/tty", "w");
+    if(!tty_file) {
+        fprintf(stderr, "Cannot open /dev/tty\n");
+        exit(1);
+    }
+
+    // Redirect stdout to /dev/tty for UI
+    dup2(fileno(tty_file), STDOUT_FILENO);
+
+    //TODO I think all of this curses junk can be removed completely.
     initscr();
     noecho();
     cbreak();
     keypad(stdscr, TRUE);
     nodelay(stdscr, TRUE);
-    
+
+     
     getmaxyx(stdscr, ui->height, ui->width);
     ui->input_height = 3;
     ui->last_pattern[0] = '\0';
@@ -106,6 +124,15 @@ void init_ui(ui_context_t *ui) {
  */
 void cleanup_ui(void) {
     endwin();
+
+    //restore original stdout 
+    dup2(original_stdout, STDOUT_FILENO);
+    close(original_stdout);
+
+    printf("This goes to the original stdout");
+    if (tty_file){
+        fclose(tty_file);
+    }
 }
 
 /**
