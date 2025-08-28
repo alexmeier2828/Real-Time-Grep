@@ -42,12 +42,13 @@ typedef struct {
 // globals for saving stdout so we can use it after we finish
 static FILE *tty_file = NULL;
 static int original_stdout = -1;
+static char grep_command[512] = "grep -rn --color=always";
 
 void init_ui(ui_context_t *ui);
 void cleanup_ui(output_buffer_t *output_buffer);
 void draw_ui(ui_context_t *ui, const char *pattern, output_buffer_t *output);
 void execute_grep(const char *pattern, output_buffer_t *output, grep_state_t *grep_state);
-void grep_process(int pipefd[2], const char pattern[]);
+void grep_process(int pipefd[2], const char pattern[], const char *command);
 int handle_input(char *pattern, grep_state_t *grep_state);
 void kill_current_grep(grep_state_t *grep_state);
 int should_execute_grep(const char *pattern, grep_state_t *grep_state);
@@ -58,11 +59,16 @@ void update_keypress_time(grep_state_t *grep_state);
  * Handles the overall program flow including UI initialization, input processing,
  * and cleanup when the program exits.
  */
-int main(void) {
+int main(int argc, char *argv[]) {
     ui_context_t ui;
     output_buffer_t output = {0};
     char pattern[MAX_PATTERN_LEN] = "";
     grep_state_t grep_state = {0};
+    
+    // Parse command line arguments
+    if (argc > 1) {
+        snprintf(grep_command, sizeof(grep_command), "%s", argv[1]);
+    }
     
     init_ui(&ui);
     
@@ -243,7 +249,7 @@ void execute_grep(const char *pattern, output_buffer_t *output, grep_state_t *gr
     }
     
     if (pid == 0) {
-        grep_process(pipefd, pattern);
+        grep_process(pipefd, pattern, grep_command);
     } else {
         grep_state->current_grep_pid = pid;
         close(pipefd[1]);
@@ -279,13 +285,18 @@ void execute_grep(const char *pattern, output_buffer_t *output, grep_state_t *gr
 /**
  * This function represents the child process that will run the grep command specified by the user
  */
-void grep_process(int pipefd[2], const char pattern[]){
+void grep_process(int pipefd[2], const char pattern[], const char *command){
     close(pipefd[0]);
     dup2(pipefd[1], STDOUT_FILENO); // duplicate file descriptor of stdout and err 
     dup2(pipefd[1], STDERR_FILENO); // to the input side of the pipe
     close(pipefd[1]);
     
-    execlp("grep", "grep", "-rn", "--color=always", pattern, ".", NULL);
+    // Build full command with pattern and current directory
+    char full_command[1024];
+    snprintf(full_command, sizeof(full_command), "%s %s .", command, pattern);
+   
+    //TODO this should use the users current shell rather than bash to avoid issues.
+    execl("/bin/sh", "sh", "-c", full_command, NULL);
     exit(1);
 }
 
