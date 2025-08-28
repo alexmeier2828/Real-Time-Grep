@@ -44,7 +44,7 @@ static FILE *tty_file = NULL;
 static int original_stdout = -1;
 
 void init_ui(ui_context_t *ui);
-void cleanup_ui(void);
+void cleanup_ui(output_buffer_t *output_buffer);
 void draw_ui(ui_context_t *ui, const char *pattern, output_buffer_t *output);
 void execute_grep(const char *pattern, output_buffer_t *output, grep_state_t *grep_state);
 void grep_process(int pipefd[2], const char pattern[]);
@@ -80,7 +80,7 @@ int main(void) {
     }
     
     kill_current_grep(&grep_state);
-    cleanup_ui();
+    cleanup_ui(&output);
     return 0;
 }
 
@@ -122,14 +122,20 @@ void init_ui(ui_context_t *ui) {
  * Cleans up ncurses resources and restores terminal state
  * Should be called before program exit to properly restore the terminal
  */
-void cleanup_ui(void) {
+void cleanup_ui(output_buffer_t *output_buffer) {
+    int i;
     endwin();
 
     //restore original stdout 
     dup2(original_stdout, STDOUT_FILENO);
     close(original_stdout);
+    
+    //print the output buffer to the original stdout 
+    for (i = 0; i < output_buffer->count; i++)
+    {
+        printf("%s\n", output_buffer->lines[i]);
+    }
 
-    printf("This goes to the original stdout");
     if (tty_file){
         fclose(tty_file);
     }
