@@ -13,7 +13,7 @@
 #define MAX_PATTERN_LEN 256
 #define MAX_OUTPUT_LINES 1000
 #define MAX_LINE_LEN 512
-#define TYPING_DELAY_MS 10
+#define TYPING_DELAY_MS 100
 
 
 typedef struct {
@@ -35,6 +35,7 @@ typedef struct {
 
 typedef struct {
     pid_t current_grep_pid;
+    int pipe_read_fd;
     struct timeval last_keypress_time;
     int timer_active;
 } grep_state_t;
@@ -53,6 +54,7 @@ int handle_input(char *pattern, grep_state_t *grep_state);
 void kill_current_grep(grep_state_t *grep_state);
 int should_execute_grep(const char *pattern, grep_state_t *grep_state);
 void update_keypress_time(grep_state_t *grep_state);
+void handle_grep_results_if_any(int *pipefd, output_buffer_t *output);
 
 /**
  * Main function - initializes the application and runs the main event loop
@@ -76,6 +78,10 @@ int main(int argc, char *argv[]) {
         
         if (should_execute_grep(pattern, &grep_state)) {
             execute_grep(pattern, &output, &grep_state);
+        }
+        
+        if (grep_state.pipe_read_fd > 0) {
+            handle_grep_results_if_any(&grep_state.pipe_read_fd, &output);
         }
         
         if (handle_input(pattern, &grep_state) == -1) {
@@ -251,36 +257,42 @@ void execute_grep(const char *pattern, output_buffer_t *output, grep_state_t *gr
     if (pid == 0) {
         grep_process(pipefd, pattern, grep_command);
     } else {
+        // This is the parent process
         grep_state->current_grep_pid = pid;
+        grep_state->pipe_read_fd = pipefd[0];
         close(pipefd[1]);
-        
-        char buffer[MAX_LINE_LEN];
-        char line[MAX_LINE_LEN];
-        int line_pos = 0;
-        ssize_t bytes_read;
-        
-        while ((bytes_read = read(pipefd[0], buffer, sizeof(buffer) - 1)) > 0) {
-            buffer[bytes_read] = '\0';
-            
-            for (int i = 0; i < bytes_read && output->count < MAX_OUTPUT_LINES; i++) {
-                if (buffer[i] == '\n') {
-                    line[line_pos] = '\0';
-                    strncpy(output->lines[output->count], line, MAX_LINE_LEN - 1);
-                    output->lines[output->count][MAX_LINE_LEN - 1] = '\0';
-                    output->count++;
-                    line_pos = 0;
-                } else if (line_pos < MAX_LINE_LEN - 1) {
-                    line[line_pos++] = buffer[i];
-                }
-            }
-        }
-        
-        close(pipefd[0]);
-        
-        waitpid(pid, NULL, 0);
-        grep_state->current_grep_pid = 0;
     }
 }
+
+void handle_grep_results_if_any(int *pipefd, output_buffer_t *output){
+    static char line[MAX_LINE_LEN];
+    static int line_pos = 0;
+    char ch;
+    ssize_t bytes_read;
+
+    if ((bytes_read = read(*pipefd, &ch, 1)) > 0) {
+        if (ch == '\n') {
+            if (output->count < MAX_OUTPUT_LINES) {
+                line[line_pos] = '\0';
+                strncpy(output->lines[output->count], line, MAX_LINE_LEN - 1);
+                output->lines[output->count][MAX_LINE_LEN - 1] = '\0';
+                output->count++;
+            }
+            line_pos = 0;
+            return;
+        } else if (line_pos < MAX_LINE_LEN - 1) {
+            line[line_pos++] = ch;
+        }
+    } else if (bytes_read == 0) {
+        // EOF - grep process finished
+        close(*pipefd);
+        *pipefd = 0;
+        line_pos = 0;
+    }
+}
+
+
+
 
 /**
  * This function represents the child process that will run the grep command specified by the user
@@ -356,6 +368,10 @@ void kill_current_grep(grep_state_t *grep_state) {
         waitpid(grep_state->current_grep_pid, NULL, WNOHANG);
         grep_state->current_grep_pid = 0;
     }
+    if (grep_state->pipe_read_fd > 0) {
+        close(grep_state->pipe_read_fd);
+        grep_state->pipe_read_fd = 0;
+    }
 }
 
 void update_keypress_time(grep_state_t *grep_state) {
@@ -378,7 +394,8 @@ int should_execute_grep(const char *pattern, grep_state_t *grep_state) {
     
     struct timeval current_time;
     gettimeofday(&current_time, NULL);
-    
+   
+    // TODO does this really need to be this complicated?
     long elapsed_ms = (current_time.tv_sec - grep_state->last_keypress_time.tv_sec) * 1000 +
                       (current_time.tv_usec - grep_state->last_keypress_time.tv_usec) / 1000;
     
