@@ -9,6 +9,7 @@
 #include <time.h>
 #include <sys/time.h>
 #include "ansi.h"
+#include "line_list.h"
 
 #define MAX_PATTERN_LEN 256
 #define MAX_OUTPUT_LINES 1000
@@ -66,6 +67,8 @@ int main(int argc, char *argv[]) {
     output_buffer_t output = {0};
     char pattern[MAX_PATTERN_LEN] = "";
     grep_state_t grep_state = {0};
+    line_list_t *test = line_list_init();
+
     
     // Parse command line arguments
     if (argc > 1) {

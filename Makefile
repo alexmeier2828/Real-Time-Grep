@@ -2,12 +2,16 @@ CC = gcc
 CFLAGS = -Wall -Wextra -std=c99
 LIBS = -lncurses
 TARGET = rtgrep
-SOURCES = rtgrep.c
+SOURCES = rtgrep.c line_list.c
+OBJECTS = $(SOURCES:.c=.o)
 
-$(TARGET): $(SOURCES)
-	$(CC) $(CFLAGS) -o $(TARGET) $(SOURCES) $(LIBS)
+$(TARGET): $(OBJECTS)
+	$(CC) $(CFLAGS) -o $(TARGET) $(OBJECTS) $(LIBS)
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(TARGET)
+	rm -f $(TARGET) $(OBJECTS)
 
 .PHONY: clean
