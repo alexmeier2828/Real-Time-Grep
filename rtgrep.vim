@@ -1,10 +1,7 @@
-let g:rtgrep_grep_command = "rtgrep \"rg --vimgrep\""
+let g:rtgrep_grep_command = "rtgrep \"rg --vimgrep --color=always\""
 let g:rtgrep_temp_file = "/tmp/rtgrep_output.txt"
 
 function RealTimeGrep()
-    " Save current directory
-    let saved_dir = getcwd()
-    
     " Check if we're in neovim or vim
     if has('nvim')
         " Use terminal for neovim
@@ -45,13 +42,16 @@ function ProcessGrepOutput(lines)
     " Filter out empty lines and terminal prompts/control sequences
     let filtered_lines = []
     for line in a:lines
+        " Clean ANSI escape sequences
+        let cleaned_line = substitute(line, '\e\[[0-9;]*m', '', 'g')
+        
         " Skip empty lines and lines that don't look like grep results
-        if line =~ '^\s*$' || line =~ '^[^:]*$'
+        if cleaned_line =~ '^\s*$' || cleaned_line =~ '^[^:]*$'
             continue
         endif
         " Look for lines that match the vimgrep format (file:line:column:text)
-        if line =~ ':\d\+:\d\+:'
-            call add(filtered_lines, line)
+        if cleaned_line =~ ':\d\+:\d\+:'
+            call add(filtered_lines, cleaned_line)
         endif
     endfor
     
