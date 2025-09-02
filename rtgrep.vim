@@ -1,16 +1,21 @@
-function RGrep()
+let g:rtgrep_grep_command = "rtgrep \"rg --vimgrep\""
+let g:rtgrep_temp_file = "/tmp/rtgrep_output.txt"
+
+function RealTimeGrep()
     " Save current directory
     let saved_dir = getcwd()
     
     " Check if we're in neovim or vim
     if has('nvim')
         " Use terminal for neovim
-        execute 'terminal rtgrep "rg --vimgrep"'
+        execute 'terminal ' . g:rtgrep_grep_command
+        startinsert
         autocmd TermClose <buffer> call ProcessRGrepResults()
     else
         " Use shell command for vim (interactive)
-        execute '!rtgrep "rg --vimgrep" > /tmp/rtgrep_output.txt'
-        call ProcessFileResults('/tmp/rtgrep_output.txt')
+        let l:command_string = '!' . g:rtgrep_grep_command . ' > ' . g:rtgrep_temp_file
+        execute l:command_string
+        call ProcessFileResults(g:rtgrep_temp_file)
     endif
 endfunction
 
@@ -58,4 +63,4 @@ function ProcessGrepOutput(lines)
     endif
 endfunction
 
-:command RGrep :call RGrep()
+:command RealTimeGrep :call RealTimeGrep()
