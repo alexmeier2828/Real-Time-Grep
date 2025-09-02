@@ -1,6 +1,11 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include "line_list.h"
+
+#define INIT_LINES_SIZE 500
+
+void deallocate_lines_contents(int length, char** lines);
 
 line_list_t* line_list_init() {
     line_list_t *l;
@@ -13,14 +18,17 @@ line_list_t* line_list_init() {
         exit(1);
     }
     
+    l->lines = malloc(sizeof(char*) * INIT_LINES_SIZE);
+    l->length = 0;
+    l->capacity = INIT_LINES_SIZE;
 
-    // TODO allocate line list
     return l;
 }
 
-void line_list_add(line_list_t *l, char line[]) {
+void line_list_add(line_list_t *l, int s, char line[]) {
     char **new_lines;
     char **lines_to_free;
+    char *line_copy;
     int i;
 
     // Expand lines if needed
@@ -38,15 +46,32 @@ void line_list_add(line_list_t *l, char line[]) {
         free(lines_to_free);
     }
     
-    // TODO the line that gets passed in here should actually be a buffer that
-    // gets reused by the caller, so here we need to strcopy to a heap
-    // allocated string. 
-    l->lines[l->length] = line;
+    line_copy = malloc(sizeof(char) * (s + 1));
+    strncpy(line_copy, line, s);
+    line_copy[s] = '\0';
+    l->lines[l->length] = line_copy;
     l->length++;
 }
 
-void lise_list_deallocate(line_list_t **l) {
+void line_list_clear(line_list_t *l) {
+    deallocate_lines_contents(l->length, l->lines);
+    l->length = 0;
+}
+
+void line_list_deallocate(line_list_t **l) {
+    deallocate_lines_contents((*l)->length, (*l)->lines);
     free((*l)->lines);
     free((*l));
     *l = NULL; 
+}
+
+/* 
+ * Deallocate the contents of char* list lines.
+ */
+void deallocate_lines_contents(int length, char** lines){
+    int i;
+
+    for (i = 0; i < length; i++) {
+        free(lines[i]);
+    }
 }
