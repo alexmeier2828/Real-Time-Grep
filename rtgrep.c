@@ -9,12 +9,12 @@
 #include <time.h>
 #include <sys/time.h>
 #include "ansi.h"
+#include "line_list.h"
 
 #define MAX_PATTERN_LEN 256
 #define MAX_OUTPUT_LINES 1000
 #define MAX_LINE_LEN 512
 #define TYPING_DELAY_MS 100
-
 
 typedef struct {
     int input_height;
@@ -26,8 +26,7 @@ typedef struct {
 } ui_context_t;
 
 typedef struct {
-    char lines[MAX_OUTPUT_LINES][MAX_LINE_LEN];
-    int count;
+    line_list_t *line_list;
     int display_start;
     int last_displayed_count;
     int needs_full_redraw;
@@ -66,6 +65,9 @@ int main(int argc, char *argv[]) {
     output_buffer_t output = {0};
     char pattern[MAX_PATTERN_LEN] = "";
     grep_state_t grep_state = {0};
+
+    //init line list
+    output.line_list = line_list_init();
     
     // Parse command line arguments
     if (argc > 1) {
@@ -93,6 +95,8 @@ int main(int argc, char *argv[]) {
     
     kill_current_grep(&grep_state);
     cleanup_ui(&output);
+    
+    line_list_deallocate(&(output.line_list));
     return 0;
 }
 
@@ -143,9 +147,9 @@ void cleanup_ui(output_buffer_t *output_buffer) {
     close(original_stdout);
     
     //print the output buffer to the original stdout 
-    for (i = 0; i < output_buffer->count; i++)
+    for (i = 0; i < output_buffer->line_list->length; i++)
     {
-        printf("%s\n", output_buffer->lines[i]);
+        printf("%s\n", output_buffer->line_list->lines[i]);
     }
 
     if (tty_file){
@@ -160,39 +164,39 @@ void cleanup_ui(output_buffer_t *output_buffer) {
  */
 void draw_ui(ui_context_t *ui, const char *pattern, output_buffer_t *output) {
     int display_lines = ui->height - ui->input_height - 1;
-    int start_line = (output->count > display_lines) ? output->count - display_lines : 0;
+    int start_line = (output->line_list->length > display_lines) ? output->line_list->length - display_lines : 0;
     
     if (output->needs_full_redraw) {
         printf(ANSI_CLEAR_SCREEN);
         
-        for (int i = 0; i < output->count && i < display_lines; i++) {
+        for (int i = 0; i < output->line_list->length && i < display_lines; i++) {
             int line_idx = start_line + i;
-            printf(ANSI_GOTO_POS "%s\n", i + 1, 1, output->lines[line_idx]);
+            printf(ANSI_GOTO_POS "%s\n", i + 1, 1, output->line_list->lines[line_idx]);
         }
         
         output->needs_full_redraw = 0;
-        output->last_displayed_count = output->count;
+        output->last_displayed_count = output->line_list->length;
         ui->separator_drawn = 0;
         ui->input_needs_refresh = 1;
-    } else if (output->count > output->last_displayed_count) {
-        int lines_to_add = output->count - output->last_displayed_count;
+    } else if (output->line_list->length > output->last_displayed_count) {
+        int lines_to_add = output->line_list->length - output->last_displayed_count;
         
         if (lines_to_add >= display_lines) {
             printf(ANSI_GOTO_POS, 1, 1);
             for (int i = 0; i < display_lines; i++) {
                 int line_idx = start_line + i;
-                printf(ANSI_CLEAR_LINE "%s\n", output->lines[line_idx]);
+                printf(ANSI_CLEAR_LINE "%s\n", output->line_list->lines[line_idx]);
             }
         } else {
-            for (int i = output->last_displayed_count; i < output->count; i++) {
+            for (int i = output->last_displayed_count; i < output->line_list->length; i++) {
                 if (i - start_line >= 0 && i - start_line < display_lines) {
                     int display_row = (i - start_line) + 1;
-                    printf(ANSI_GOTO_POS "%s\n", display_row, 1, output->lines[i]);
+                    printf(ANSI_GOTO_POS "%s\n", display_row, 1, output->line_list->lines[i]);
                 }
             }
         }
         
-        output->last_displayed_count = output->count;
+        output->last_displayed_count = output->line_list->length;
     }
     
     if (!ui->separator_drawn) {
@@ -236,8 +240,7 @@ void execute_grep(const char *pattern, output_buffer_t *output, grep_state_t *gr
     }
     
     kill_current_grep(grep_state);
-    
-    output->count = 0;
+    line_list_clear(output->line_list);
     output->needs_full_redraw = 1;
     
     int pipefd[2];
@@ -272,12 +275,8 @@ void handle_grep_results_if_any(int *pipefd, output_buffer_t *output){
 
     if ((bytes_read = read(*pipefd, &ch, 1)) > 0) {
         if (ch == '\n') {
-            if (output->count < MAX_OUTPUT_LINES) {
-                line[line_pos] = '\0';
-                strncpy(output->lines[output->count], line, MAX_LINE_LEN - 1);
-                output->lines[output->count][MAX_LINE_LEN - 1] = '\0';
-                output->count++;
-            }
+            line[line_pos] = '\0';
+            line_list_add(output->line_list, MAX_LINE_LEN - 1, line);
             line_pos = 0;
             return;
         } else if (line_pos < MAX_LINE_LEN - 1) {

@@ -2,3 +2,5 @@ rtgrep
 tags
 sample.c
 test.txt
+*.o
+test.c
