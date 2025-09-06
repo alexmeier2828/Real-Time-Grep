@@ -29,7 +29,7 @@ install: $(TARGET)
 	install -d $(BINDIR)
 	install -m 755 $(TARGET) $(BINDIR)
 	install -d $(MANDIR)
-	install -m 644 rtgrep.1 $(MANDIR)
+	install -m 644 man/rtgrep.1 $(MANDIR)
 
 uninstall:
 	rm -f $(BINDIR)/$(TARGET)
