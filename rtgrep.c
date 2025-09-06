@@ -328,12 +328,10 @@ int handle_input(char *pattern, grep_state_t *grep_state) {
     
     switch (ch) {
         case 27: // ESC key
-            return -1;
-            
         case KEY_ENTER:
         case '\n':
         case '\r':
-            break;
+            return -1;
             
         case KEY_BACKSPACE:
         case 127:
