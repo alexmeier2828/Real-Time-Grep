@@ -10,6 +10,7 @@
 #include <sys/time.h>
 #include "ansi.h"
 #include "line_list.h"
+#include "arguments.h"
 
 #define MAX_PATTERN_LEN 256
 #define MAX_OUTPUT_LINES 1000
@@ -65,19 +66,28 @@ int main(int argc, char *argv[]) {
     output_buffer_t output = {0};
     char pattern[MAX_PATTERN_LEN] = "";
     grep_state_t grep_state = {0};
+    arguments_t *args;
 
     //init line list
     output.line_list = line_list_init();
     
     // Parse command line arguments
-    if (argc > 1) {
-        snprintf(grep_command, sizeof(grep_command), "%s", argv[1]);
+    args = get_cli_arguments(argc, argv);
+    if (args->grep_command) {
+        // TODO this is sortof gross. Should probably just consolidate all of the
+        // defaults into the args so we don't have to do any of this copying
+        strcpy(grep_command, args->grep_command);
+    }
+
+    if (args->pattern) {
+        strcpy(pattern, args->pattern);
+        gettimeofday(&grep_state.last_keypress_time, NULL);
+        grep_state.timer_active = 1;
     }
     
     init_ui(&ui);
     
     while (1) {
-        
         if (should_execute_grep(pattern, &grep_state)) {
             execute_grep(pattern, &output, &grep_state);
         }
@@ -95,7 +105,8 @@ int main(int argc, char *argv[]) {
     
     kill_current_grep(&grep_state);
     cleanup_ui(&output);
-    
+  
+    deallocate_arguments(&args);
     line_list_deallocate(&(output.line_list));
     return 0;
 }
