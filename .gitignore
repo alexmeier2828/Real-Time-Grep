@@ -4,3 +4,4 @@ sample.c
 test.txt
 *.o
 test.c
+test_runner
