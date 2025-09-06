@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
-#include "../line_list.h"
+#include "line_list.h"
 #include "test_utils.h"
 
 void test_line_list_init() {

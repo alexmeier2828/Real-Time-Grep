@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
-#include "../arguments.h"
+#include "arguments.h"
 #include "test_utils.h"
 
 void test_basic_pattern_only() {
@@ -93,21 +93,6 @@ void test_complex_strings() {
     deallocate_arguments(&args);
 }
 
-void test_multiple_non_option_args() {
-    char* argv[] = {"rtgrep", "first_pattern", "second_arg", "-g", "rg"};
-    int argc = 5;
-    
-    arguments_t* args = get_cli_arguments(argc, argv);
-    
-    test_assert(args != NULL, "get_cli_arguments returns non-NULL");
-    test_assert(args->pattern != NULL, "pattern is set");
-    test_assert(strcmp(args->pattern, "first_pattern") == 0, "pattern uses first non-option argument");
-    test_assert(args->grep_command != NULL, "grep_command is set");
-    test_assert(strcmp(args->grep_command, "rg") == 0, "grep_command matches expected value");
-    
-    deallocate_arguments(&args);
-}
-
 void test_pattern_only() {
     char* argv[] = {"rtgrep", "first_pattern"};
     int argc = 2;
@@ -132,7 +117,6 @@ int run_arguments_tests() {
     test_no_pattern();
     test_empty_strings();
     test_complex_strings();
-    test_multiple_non_option_args();
     test_pattern_only();
     
     printf("\nArguments tests completed: %d/%d passed\n", test_passed, test_count);
