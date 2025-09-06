@@ -1,6 +1,6 @@
 # rtgrep - Real-Time Interactive Grep
 
-A real-time interactive grep utility that provides a two-pane terminal interface for searching through files. As you type search patterns, rtgrep displays matching results instantly, making it ideal for quickly exploring and searching through codebases and text files.  This project was partially inspired by the neovim's Telescope, which has a "live grep" mode that displays grep results as you type.  I wanted something similar that was a standalone utility that could be integrated into other things (see rtgrep.vim for an example of integrating into traditional vim).
+A real-time interactive grep utility that provides a two-pane terminal interface for searching through files. As you type search patterns, rtgrep displays matching results instantly, making it ideal for quickly exploring and searching through codebases and text files.  This project was partially inspired by the neovim's Telescope, which has a "live grep" mode that displays grep results as you type.  I wanted something similar that was a standalone utility that could be integrated into other things (see [rtgrep.vim](./rtgrep.vim) for an example of integrating into traditional vim).
 
 This project is still highly a work in progress and is mostly intended for my own use, but I've included a license just in case. 
 
