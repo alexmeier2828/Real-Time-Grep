@@ -1,4 +1,4 @@
-let g:rtgrep_grep_command = "rtgrep \"rg --vimgrep\""
+let g:rtgrep_grep_command = "rtgrep -g \"rg --vimgrep --color=always\""
 let g:rtgrep_temp_file = "/tmp/rtgrep_output.txt"
 
 function RealTimeGrep()

@@ -3,19 +3,7 @@
 #include <string.h>
 #include <assert.h>
 #include "../line_list.h"
-
-int test_count = 0;
-int test_passed = 0;
-
-void test_assert(int condition, const char* test_name) {
-    test_count++;
-    if (condition) {
-        printf("PASS: %s\n", test_name);
-        test_passed++;
-    } else {
-        printf("FAIL: %s\n", test_name);
-    }
-}
+#include "test_utils.h"
 
 void test_line_list_init() {
     line_list_t* list = line_list_init();
@@ -71,7 +59,7 @@ void test_line_list_capacity_expansion() {
     
     // Add enough items to trigger capacity expansion
     for (int i = 0; i < initial_capacity + 1; i++) {
-        char buffer[10];
+        char buffer[20];
         sprintf(buffer, "item%d", i);
         line_list_add(list, strlen(buffer), buffer);
     }
@@ -95,6 +83,7 @@ void test_line_list_empty_string() {
 }
 
 int run_line_list_tests() {
+    reset_test_counters();
     printf("Running line_list tests...\n");
     
     test_line_list_init();

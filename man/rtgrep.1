@@ -1,0 +1,138 @@
+.TH RTGREP 1 "2025-09-06" "rtgrep x.x.x" "Real-Time Grep Manual"
+.SH NAME
+rtgrep \- real-time interactive grep utility
+.SH SYNOPSIS
+.B rtgrep
+[\fIOPTIONS\fR] [\fIPATTERN\fR] 
+.SH DESCRIPTION
+.B rtgrep
+is an interactive, real-time grep utility that provides a two-pane terminal interface for searching through files. It displays grep results in real-time as you type search patterns, making it ideal for quickly exploring and searching through codebases and text files.
+
+The interface consists of two panes:
+.IP \(bu 2
+.B Output Field
+- The upper pane displays matching lines from grep results
+.IP \(bu 2
+.B Input Field
+- The bottom pane where you enter search patterns
+
+When you type a pattern and pause for 100ms, rtgrep automatically executes a grep search and displays the results. Only one grep process runs at a time, and typing while a search is running will kill the current process and start a new one when you pause.
+.SH OPTIONS
+.TP
+.BR \-g " " \fICOMMAND\fR
+Use custom grep command instead of the default "grep -rn --color=always". This allows you to specify different grep options or use alternative tools like ripgrep or ag.
+.TP
+.BR \-h ", " \-\-help
+Display help information and exit.
+.SH ARGUMENTS
+.TP
+.I PATTERN
+Optional initial search pattern. If provided, rtgrep will start with this pattern and begin searching immediately.
+.SH USAGE
+.SS Interactive Mode
+1. Run
+.B rtgrep
+without arguments to start in interactive mode
+2. Type your search pattern in the input field at the bottom
+3. Results appear in the output field as you type (with a 100ms delay)
+4. Press
+.B Enter
+or
+.B Escape
+to exit
+.SS Command Line Pattern
+Run
+.B rtgrep
+with a pattern argument to start searching immediately:
+.PP
+.RS
+rtgrep "function.*main"
+.RE
+.SS Custom Grep Command
+Use a different grep command or options:
+.PP
+.RS
+rtgrep -g "rg --color=always -n" "TODO"
+.RE
+.SH KEYBOARD CONTROLS
+.TP
+.B Backspace
+Delete the last character from the search pattern
+.TP
+.B Enter
+Exit the program and print all results to stdout
+.TP
+.B Escape
+Exit the program and print all results to stdout
+.TP
+.B Printable characters (32-126)
+Add character to the search pattern
+.SH BEHAVIOR
+.IP \(bu 2
+Only one grep process runs at a time for resource efficiency
+.IP \(bu 2
+Grep is not executed if the input field is empty
+.IP \(bu 2
+New searches automatically kill previous grep processes
+.IP \(bu 2
+Results that exceed the output pane size show the most recent matches
+.IP \(bu 2
+All results are preserved and printed to stdout when exiting
+.IP \(bu 2
+The program searches recursively through the current directory
+.SH OUTPUT
+While running, rtgrep displays results in the upper pane with the format:
+.PP
+.RS
+filename:line_number: matched_line_content
+.RE
+.PP
+When exiting, all accumulated results are printed to stdout, making it suitable for use in pipelines or for saving results to files.
+.SH EXAMPLES
+.TP
+Start rtgrep interactively:
+.RS
+rtgrep
+.RE
+.TP
+Search for "main" function definitions:
+.RS
+rtgrep "int main"
+.RE
+.TP
+Use ripgrep instead of grep:
+.RS
+rtgrep -g "rg --color=always -n" "TODO"
+.RE
+.TP
+Search for header files and save results:
+.RS
+rtgrep "\\.h:" > header_files.txt
+.RE
+.SH FILES
+rtgrep searches recursively through files in the current working directory using the specified or default grep command.
+.SH EXIT STATUS
+.B rtgrep
+exits with status 0 on normal termination (Enter or Escape key).
+.SH ENVIRONMENT
+The program uses the system shell (/bin/sh) to execute grep commands.
+.SH NOTES
+.IP \(bu 2
+The program redirects stdout to /dev/tty during operation to maintain the interface, then restores it when exiting
+.IP \(bu 2
+Color output from grep is preserved in the display
+.IP \(bu 2
+Maximum pattern length is 256 characters
+.IP \(bu 2
+Maximum line length for results is 512 characters
+.IP \(bu 2
+Up to 1000 output lines are stored
+.SH SEE ALSO
+.BR grep (1),
+.BR rg (1),
+.BR ag (1),
+.BR find (1)
+.SH AUTHOR
+Written for real-time interactive file searching and code exploration.
+.SH REPORTING BUGS
+Report bugs and issues through the project repository.
