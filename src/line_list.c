@@ -7,6 +7,13 @@
 
 void deallocate_lines_contents(int length, char** lines);
 
+/* 
+ * Reset all of the pane properties based on the pane's current position.
+ * should be called whenever the pane is moved, or when reallocating the
+ * backing list.
+ */
+void refresh_pane(line_list_t *l);
+
 line_list_t* line_list_init() {
     line_list_t *l;
     
@@ -21,6 +28,9 @@ line_list_t* line_list_init() {
     l->lines = malloc(sizeof(char*) * INIT_LINES_SIZE);
     l->length = 0;
     l->capacity = INIT_LINES_SIZE;
+    l->pane = malloc(sizeof(line_list_pane_t));
+    l->pane->position = 0;
+    refresh_pane(l);
 
     return l;
 }
@@ -51,19 +61,47 @@ void line_list_add(line_list_t *l, int s, char line[]) {
     line_copy[s] = '\0';
     l->lines[l->length] = line_copy;
     l->length++;
+    refresh_pane(l);
 }
 
 void line_list_clear(line_list_t *l) {
     deallocate_lines_contents(l->length, l->lines);
     l->length = 0;
+    l->pane->position = 0;
+    refresh_pane(l);
+}
+
+void line_list_scroll_pane(line_list_t *l, int n) {
+    int new_position = l->pane->position + n;
+    
+    // Prevent scrolling beyond the end of the list
+    if(new_position >= l->length){
+        return; 
+    }
+    
+    // Prevent scrolling before the beginning of the list
+    if(new_position < 0){
+        return; 
+    }
+
+    l->pane->position = new_position; 
+    refresh_pane(l);
 }
 
 void line_list_deallocate(line_list_t **l) {
+    free((*l)->pane);
     deallocate_lines_contents((*l)->length, (*l)->lines);
     free((*l)->lines);
     free((*l));
     *l = NULL; 
 }
+
+//---- Private Functions ----//
+void refresh_pane(line_list_t *l) {
+    l->pane->length = l->length - l->pane->position;
+    l->pane->lines = l->lines + l->pane->position;
+}
+
 
 /* 
  * Deallocate the contents of char* list lines.
