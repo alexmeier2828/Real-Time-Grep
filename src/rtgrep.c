@@ -301,9 +301,6 @@ void handle_grep_results_if_any(int *pipefd, output_buffer_t *output){
     }
 }
 
-
-
-
 /**
  * This function represents the child process that will run the grep command specified by the user
  */
@@ -315,9 +312,8 @@ void grep_process(int pipefd[2], const char pattern[], const char *command){
     
     // Build full command with pattern and current directory
     char full_command[1024];
-    snprintf(full_command, sizeof(full_command), "%s %s .", command, pattern);
+    snprintf(full_command, sizeof(full_command), "%s \"%s\" .", command, pattern);
    
-    //TODO this should use the users current shell rather than bash to avoid issues.
     execl("/bin/sh", "sh", "-c", full_command, NULL);
     exit(1);
 }
