@@ -31,12 +31,12 @@ arguments_t* get_cli_arguments(int argc, char **argv) {
                 fprintf(stderr, "Option -%c requires an argument.\n", optopt);
                 print_usage(argv[0]);
                 deallocate_arguments(&parsed_args);
-                exit(1);
+                return NULL;
             case '?':
                 fprintf(stderr, "Unknown option: -%c\n", optopt);
                 print_usage(argv[0]);
                 deallocate_arguments(&parsed_args);
-                exit(1);
+                return NULL;
         }
     }
 
@@ -50,7 +50,7 @@ arguments_t* get_cli_arguments(int argc, char **argv) {
             fprintf(stderr, "Error: Too many arguments.\n");
             print_usage(argv[0]);
             deallocate_arguments(&parsed_args);
-            exit(1);
+            return NULL;
         }
     }
 

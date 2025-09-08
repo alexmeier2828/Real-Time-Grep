@@ -45,7 +45,7 @@ static FILE *tty_file = NULL;
 static int original_stdout = -1;
 static char grep_command[512] = "grep -rn --color=always";
 
-void init_ui(ui_context_t *ui);
+int init_ui(ui_context_t *ui);
 void cleanup_ui(output_buffer_t *output_buffer);
 void draw_ui(ui_context_t *ui, const char *pattern, output_buffer_t *output);
 void execute_grep(const char *pattern, output_buffer_t *output, grep_state_t *grep_state);
@@ -70,9 +70,19 @@ int main(int argc, char *argv[]) {
 
     //init line list
     output.line_list = line_list_init();
+    if (output.line_list == NULL) {
+        fprintf(stderr, "Failed to initialize line list\n");
+        return 1;
+    }
     
     // Parse command line arguments
     args = get_cli_arguments(argc, argv);
+    if (args == NULL) {
+        // get_cli_arguments failed, clean up and exit
+        line_list_deallocate(&(output.line_list));
+        return 1;
+    }
+    
     if (args->grep_command) {
         // TODO this is sortof gross. Should probably just consolidate all of the
         // defaults into the args so we don't have to do any of this copying
@@ -85,7 +95,12 @@ int main(int argc, char *argv[]) {
         grep_state.timer_active = 1;
     }
     
-    init_ui(&ui);
+    if (init_ui(&ui) != 0) {
+        // init_ui failed, clean up and exit
+        deallocate_arguments(&args);
+        line_list_deallocate(&(output.line_list));
+        return 1;
+    }
     
     while (1) {
         if (should_execute_grep(pattern, &grep_state)) {
@@ -116,14 +131,14 @@ int main(int argc, char *argv[]) {
  * Sets up the output window (large pane) and input window (bottom pane)
  * Configures ncurses settings for proper input handling and display
  */
-void init_ui(ui_context_t *ui) {
+int init_ui(ui_context_t *ui) {
 
     //save original stdout 
     original_stdout = dup(STDOUT_FILENO);
     tty_file = fopen("/dev/tty", "w");
     if(!tty_file) {
         fprintf(stderr, "Cannot open /dev/tty\n");
-        exit(1);
+        return -1;
     }
 
     // Redirect stdout to /dev/tty for UI
@@ -143,6 +158,7 @@ void init_ui(ui_context_t *ui) {
     ui->last_pattern[1] = '?'; // Ensure it won't match empty pattern initially
     ui->separator_drawn = 0;
     ui->input_needs_refresh = 1;
+    return 0;
 }
 
 /**
@@ -175,39 +191,41 @@ void cleanup_ui(output_buffer_t *output_buffer) {
  */
 void draw_ui(ui_context_t *ui, const char *pattern, output_buffer_t *output) {
     int display_lines = ui->height - ui->input_height - 1;
-    int start_line = (output->line_list->length > display_lines) ? output->line_list->length - display_lines : 0;
+    line_list_pane_t *output_pane = output->line_list->pane;
+    int pane_length = output_pane->length;
+    int start_line = (pane_length > display_lines) ? pane_length - display_lines : 0;
     
     if (output->needs_full_redraw) {
         printf(ANSI_CLEAR_SCREEN);
         
-        for (int i = 0; i < output->line_list->length && i < display_lines; i++) {
+        for (int i = 0; i < pane_length && i < display_lines; i++) {
             int line_idx = start_line + i;
-            printf(ANSI_GOTO_POS "%s\n", i + 1, 1, output->line_list->lines[line_idx]);
+            printf(ANSI_GOTO_POS "%s\n", i + 1, 1, output_pane->lines[line_idx]);
         }
         
         output->needs_full_redraw = 0;
-        output->last_displayed_count = output->line_list->length;
+        output->last_displayed_count = pane_length;
         ui->separator_drawn = 0;
         ui->input_needs_refresh = 1;
-    } else if (output->line_list->length > output->last_displayed_count) {
-        int lines_to_add = output->line_list->length - output->last_displayed_count;
+    } else if (pane_length > output->last_displayed_count) {
+        int lines_to_add = pane_length - output->last_displayed_count;
         
         if (lines_to_add >= display_lines) {
             printf(ANSI_GOTO_POS, 1, 1);
             for (int i = 0; i < display_lines; i++) {
                 int line_idx = start_line + i;
-                printf(ANSI_CLEAR_LINE "%s\n", output->line_list->lines[line_idx]);
+                printf(ANSI_CLEAR_LINE "%s\n", output_pane->lines[line_idx]);
             }
         } else {
-            for (int i = output->last_displayed_count; i < output->line_list->length; i++) {
+            for (int i = output->last_displayed_count; i < pane_length; i++) {
                 if (i - start_line >= 0 && i - start_line < display_lines) {
                     int display_row = (i - start_line) + 1;
-                    printf(ANSI_GOTO_POS "%s\n", display_row, 1, output->line_list->lines[i]);
+                    printf(ANSI_GOTO_POS "%s\n", display_row, 1, output_pane->lines[i]);
                 }
             }
         }
         
-        output->last_displayed_count = output->line_list->length;
+        output->last_displayed_count = pane_length;
     }
     
     if (!ui->separator_drawn) {

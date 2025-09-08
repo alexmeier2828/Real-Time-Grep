@@ -21,8 +21,8 @@ line_list_t* line_list_init() {
 
     if (l == NULL) {
         // TOOD make this log to error 
-        printf("ERROR: line_list_init: failed to allocate");
-        exit(1);
+        fprintf(stderr, "ERROR: line_list_init: failed to allocate\n");
+        return NULL;
     }
     
     l->lines = malloc(sizeof(char*) * INIT_LINES_SIZE);
