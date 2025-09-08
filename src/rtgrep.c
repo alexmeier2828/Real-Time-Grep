@@ -16,6 +16,7 @@
 #define MAX_OUTPUT_LINES 1000
 #define MAX_LINE_LEN 512
 #define TYPING_DELAY_MS 100
+#define ctrl(x) ((x) & 0x1f)
 
 typedef struct {
     int input_height;
@@ -50,7 +51,7 @@ void cleanup_ui(output_buffer_t *output_buffer);
 void draw_ui(ui_context_t *ui, const char *pattern, output_buffer_t *output);
 void execute_grep(const char *pattern, output_buffer_t *output, grep_state_t *grep_state);
 void grep_process(int pipefd[2], const char pattern[], const char *command);
-int handle_input(char *pattern, grep_state_t *grep_state);
+int handle_input(char *pattern, grep_state_t *grep_state, output_buffer_t *output);
 void kill_current_grep(grep_state_t *grep_state);
 int should_execute_grep(const char *pattern, grep_state_t *grep_state);
 void update_keypress_time(grep_state_t *grep_state);
@@ -111,7 +112,7 @@ int main(int argc, char *argv[]) {
             handle_grep_results_if_any(&grep_state.pipe_read_fd, &output);
         }
         
-        if (handle_input(pattern, &grep_state) == -1) {
+        if (handle_input(pattern, &grep_state, &output) == -1) {
             break;
         }
         
@@ -197,6 +198,7 @@ void draw_ui(ui_context_t *ui, const char *pattern, output_buffer_t *output) {
     
     if (output->needs_full_redraw) {
         printf(ANSI_CLEAR_SCREEN);
+        start_line = 0;
         
         for (int i = 0; i < pane_length && i < display_lines; i++) {
             int line_idx = start_line + i;
@@ -342,7 +344,7 @@ void grep_process(int pipefd[2], const char pattern[], const char *command){
  * Returns -1 when user wants to exit (ESC), 0 otherwise
  * Triggers grep execution when Enter is pressed
  */
-int handle_input(char *pattern, grep_state_t *grep_state) {
+int handle_input(char *pattern, grep_state_t *grep_state, output_buffer_t *output) {
     int ch = getch();
     int pattern_len = strlen(pattern);
     int pattern_changed = 0;
@@ -366,7 +368,22 @@ int handle_input(char *pattern, grep_state_t *grep_state) {
                 pattern_changed = 1;
             }
             break;
-            
+        case KEY_UP:
+            line_list_scroll_pane(output->line_list, -1);
+            output->needs_full_redraw = true;
+            break;
+        case KEY_DOWN:
+            line_list_scroll_pane(output->line_list, 1);
+            output->needs_full_redraw = true;
+            break;
+        case ctrl('u'):
+            line_list_scroll_pane(output->line_list, -10);
+            output->needs_full_redraw = true;
+            break;
+        case ctrl('d'):
+            line_list_scroll_pane(output->line_list, 10);
+            output->needs_full_redraw = true;
+            break;
         default:
             if (ch >= 32 && ch <= 126 && pattern_len < MAX_PATTERN_LEN - 1) {
                 pattern[pattern_len] = ch;
