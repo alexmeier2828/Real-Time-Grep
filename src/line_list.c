@@ -5,7 +5,7 @@
 
 #define INIT_LINES_SIZE 500
 
-void deallocate_lines_contents(int length, char** lines);
+void deallocate_lines_contents(int length, line_list_item* items);
 
 /* 
  * Reset all of the pane properties based on the pane's current position.
@@ -25,7 +25,7 @@ line_list_t* line_list_init() {
         return NULL;
     }
     
-    l->lines = malloc(sizeof(char*) * INIT_LINES_SIZE);
+    l->items = malloc(sizeof(line_list_item) * INIT_LINES_SIZE);
     l->length = 0;
     l->capacity = INIT_LINES_SIZE;
     l->pane = malloc(sizeof(line_list_pane_t));
@@ -36,36 +36,37 @@ line_list_t* line_list_init() {
 }
 
 void line_list_add(line_list_t *l, int s, char line[]) {
-    char **new_lines;
-    char **lines_to_free;
+    line_list_item *new_items;
+    line_list_item *items_to_free;
     char *line_copy;
     int i;
 
-    // Expand lines if needed
+    // Expand items if needed
     if (l->length == l->capacity) {
-        new_lines = malloc(sizeof(char*) * l->capacity*2);
+        new_items = malloc(sizeof(line_list_item) * l->capacity*2);
         l->capacity *= 2;
 
         for (i = 0; i < l->length; i++) {
-            new_lines[i] = l->lines[i];
+            new_items[i] = l->items[i];
         }
         
-        lines_to_free = l->lines;
-        l->lines = new_lines;
+        items_to_free = l->items;
+        l->items = new_items;
 
-        free(lines_to_free);
+        free(items_to_free);
     }
     
     line_copy = malloc(sizeof(char) * (s + 1));
     strncpy(line_copy, line, s);
     line_copy[s] = '\0';
-    l->lines[l->length] = line_copy;
+    l->items[l->length].contents = line_copy;
+    l->items[l->length].selected = false;
     l->length++;
     refresh_pane(l);
 }
 
 void line_list_clear(line_list_t *l) {
-    deallocate_lines_contents(l->length, l->lines);
+    deallocate_lines_contents(l->length, l->items);
     l->length = 0;
     l->pane->position = 0;
     refresh_pane(l);
@@ -90,8 +91,8 @@ void line_list_scroll_pane(line_list_t *l, int n) {
 
 void line_list_deallocate(line_list_t **l) {
     free((*l)->pane);
-    deallocate_lines_contents((*l)->length, (*l)->lines);
-    free((*l)->lines);
+    deallocate_lines_contents((*l)->length, (*l)->items);
+    free((*l)->items);
     free((*l));
     *l = NULL; 
 }
@@ -99,17 +100,17 @@ void line_list_deallocate(line_list_t **l) {
 //---- Private Functions ----//
 void refresh_pane(line_list_t *l) {
     l->pane->length = l->length - l->pane->position;
-    l->pane->lines = l->lines + l->pane->position;
+    l->pane->items = l->items + l->pane->position;
 }
 
 
 /* 
- * Deallocate the contents of char* list lines.
+ * Deallocate the contents of line_list_item array.
  */
-void deallocate_lines_contents(int length, char** lines){
+void deallocate_lines_contents(int length, line_list_item* items){
     int i;
 
     for (i = 0; i < length; i++) {
-        free(lines[i]);
+        free(items[i].contents);
     }
 }
