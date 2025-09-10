@@ -202,7 +202,8 @@ void draw_ui(ui_context_t *ui, const char *pattern, output_buffer_t *output) {
         
         for (int i = 0; i < pane_length && i < display_lines; i++) {
             int line_idx = start_line + i;
-            printf(ANSI_GOTO_POS "%s\n", i + 1, 1, output_pane->items[line_idx].contents);
+            char selector = output_pane->items[line_idx].selected ? '>' : ' ';
+            printf(ANSI_GOTO_POS "%c%s\n", i + 1, 1, selector, output_pane->items[line_idx].contents);
         }
         
         output->needs_full_redraw = 0;
@@ -216,13 +217,15 @@ void draw_ui(ui_context_t *ui, const char *pattern, output_buffer_t *output) {
             printf(ANSI_GOTO_POS, 1, 1);
             for (int i = 0; i < display_lines; i++) {
                 int line_idx = start_line + i;
-                printf(ANSI_CLEAR_LINE "%s\n", output_pane->items[line_idx].contents);
+                char selector = output_pane->items[line_idx].selected ? '>' : ' ';
+                printf(ANSI_CLEAR_LINE "%c%s\n", selector, output_pane->items[line_idx].contents);
             }
         } else {
             for (int i = output->last_displayed_count; i < pane_length; i++) {
                 if (i - start_line >= 0 && i - start_line < display_lines) {
                     int display_row = (i - start_line) + 1;
-                    printf(ANSI_GOTO_POS "%s\n", display_row, 1, output_pane->items[i].contents);
+                    char selector = output_pane->items[i].selected ? '>' : ' ';
+                    printf(ANSI_GOTO_POS "%c%s\n", display_row, 1, selector, output_pane->items[i].contents);
                 }
             }
         }
@@ -383,6 +386,12 @@ int handle_input(char *pattern, grep_state_t *grep_state, output_buffer_t *outpu
         case ctrl('d'):
             line_list_scroll_pane(output->line_list, 10);
             output->needs_full_redraw = true;
+            break;
+        case '\t': // Tab key
+            if (output->line_list->pane->length > 0) {
+                output->line_list->pane->items[0].selected = !output->line_list->pane->items[0].selected;
+                output->needs_full_redraw = true;
+            }
             break;
         default:
             if (ch >= 32 && ch <= 126 && pattern_len < MAX_PATTERN_LEN - 1) {
