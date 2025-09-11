@@ -202,8 +202,11 @@ void draw_ui(ui_context_t *ui, const char *pattern, output_buffer_t *output) {
         
         for (int i = 0; i < pane_length && i < display_lines; i++) {
             int line_idx = start_line + i;
-            char selector = output_pane->items[line_idx].selected ? '>' : ' ';
-            printf(ANSI_GOTO_POS "%c%s\n", i + 1, 1, selector, output_pane->items[line_idx].contents);
+            char selector[4] = " ";
+            if (output_pane->items[line_idx].selected) {
+                strcpy(selector, "▶");
+            }
+            printf(ANSI_GOTO_POS "%s%s\n", i + 1, 1, selector, output_pane->items[line_idx].contents);
         }
         
         output->needs_full_redraw = 0;
@@ -217,15 +220,21 @@ void draw_ui(ui_context_t *ui, const char *pattern, output_buffer_t *output) {
             printf(ANSI_GOTO_POS, 1, 1);
             for (int i = 0; i < display_lines; i++) {
                 int line_idx = start_line + i;
-                char selector = output_pane->items[line_idx].selected ? '>' : ' ';
-                printf(ANSI_CLEAR_LINE "%c%s\n", selector, output_pane->items[line_idx].contents);
+                char selector[4] = " ";
+            if (output_pane->items[line_idx].selected) {
+                strcpy(selector, "▶");
+            }
+                printf(ANSI_CLEAR_LINE "%s%s\n", selector, output_pane->items[line_idx].contents);
             }
         } else {
             for (int i = output->last_displayed_count; i < pane_length; i++) {
                 if (i - start_line >= 0 && i - start_line < display_lines) {
                     int display_row = (i - start_line) + 1;
-                    char selector = output_pane->items[i].selected ? '>' : ' ';
-                    printf(ANSI_GOTO_POS "%c%s\n", display_row, 1, selector, output_pane->items[i].contents);
+                    char selector[4] = " ";
+                    if (output_pane->items[i].selected) {
+                        strcpy(selector, "▶");
+                    }
+                    printf(ANSI_GOTO_POS "%s%s\n", display_row, 1, selector, output_pane->items[i].contents);
                 }
             }
         }
