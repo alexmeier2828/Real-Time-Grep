@@ -32,6 +32,7 @@ typedef struct {
     int display_start;
     int last_displayed_count;
     int needs_full_redraw;
+    int cursor_position;
 } output_buffer_t;
 
 typedef struct {
@@ -51,7 +52,7 @@ void cleanup_ui(output_buffer_t *output_buffer);
 void draw_ui(ui_context_t *ui, const char *pattern, output_buffer_t *output);
 void execute_grep(const char *pattern, output_buffer_t *output, grep_state_t *grep_state);
 void grep_process(int pipefd[2], const char pattern[], const char *command);
-int handle_input(char *pattern, grep_state_t *grep_state, output_buffer_t *output);
+int handle_input(char *pattern, grep_state_t *grep_state, output_buffer_t *output, ui_context_t *ui);
 void kill_current_grep(grep_state_t *grep_state);
 int should_execute_grep(const char *pattern, grep_state_t *grep_state);
 void update_keypress_time(grep_state_t *grep_state);
@@ -75,7 +76,7 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Failed to initialize line list\n");
         return 1;
     }
-    
+
     // Parse command line arguments
     args = get_cli_arguments(argc, argv);
     if (args == NULL) {
@@ -83,7 +84,7 @@ int main(int argc, char *argv[]) {
         line_list_deallocate(&(output.line_list));
         return 1;
     }
-    
+
     if (args->grep_command) {
         // TODO this is sortof gross. Should probably just consolidate all of the
         // defaults into the args so we don't have to do any of this copying
@@ -95,33 +96,33 @@ int main(int argc, char *argv[]) {
         gettimeofday(&grep_state.last_keypress_time, NULL);
         grep_state.timer_active = 1;
     }
-    
+
     if (init_ui(&ui) != 0) {
         // init_ui failed, clean up and exit
         deallocate_arguments(&args);
         line_list_deallocate(&(output.line_list));
         return 1;
     }
-    
+
     while (1) {
         if (should_execute_grep(pattern, &grep_state)) {
             execute_grep(pattern, &output, &grep_state);
         }
-        
+
         if (grep_state.pipe_read_fd > 0) {
             handle_grep_results_if_any(&grep_state.pipe_read_fd, &output);
         }
-        
-        if (handle_input(pattern, &grep_state, &output) == -1) {
+
+        if (handle_input(pattern, &grep_state, &output, &ui) == -1) {
             break;
         }
-        
+
         draw_ui(&ui, pattern, &output);
     }
-    
+
     kill_current_grep(&grep_state);
     cleanup_ui(&output);
-  
+
     deallocate_arguments(&args);
     line_list_deallocate(&(output.line_list));
     return 0;
@@ -134,7 +135,7 @@ int main(int argc, char *argv[]) {
  */
 int init_ui(ui_context_t *ui) {
 
-    //save original stdout 
+    //save original stdout
     original_stdout = dup(STDOUT_FILENO);
     tty_file = fopen("/dev/tty", "w");
     if(!tty_file) {
@@ -152,7 +153,7 @@ int init_ui(ui_context_t *ui) {
     keypad(stdscr, TRUE);
     nodelay(stdscr, TRUE);
 
-     
+
     getmaxyx(stdscr, ui->height, ui->width);
     ui->input_height = 3;
     ui->last_pattern[0] = '\0';
@@ -170,11 +171,11 @@ void cleanup_ui(output_buffer_t *output_buffer) {
     int i;
     endwin();
 
-    //restore original stdout 
+    //restore original stdout
     dup2(original_stdout, STDOUT_FILENO);
     close(original_stdout);
-    
-    //print the output buffer to the original stdout 
+
+    //print the output buffer to the original stdout
     for (i = 0; i < output_buffer->line_list->length; i++)
     {
         printf("%s\n", output_buffer->line_list->items[i].contents);
@@ -195,27 +196,36 @@ void draw_ui(ui_context_t *ui, const char *pattern, output_buffer_t *output) {
     line_list_pane_t *output_pane = output->line_list->pane;
     int pane_length = output_pane->length;
     int start_line = (pane_length > display_lines) ? pane_length - display_lines : 0;
-    
+
     if (output->needs_full_redraw) {
         printf(ANSI_CLEAR_SCREEN);
         start_line = 0;
-        
+
         for (int i = 0; i < pane_length && i < display_lines; i++) {
             int line_idx = start_line + i;
             char selector[4] = " ";
+
+            // If the cursor position is at the current line, invert the colors.
+            if (output->cursor_position == line_idx) {
+                printf(ANSI_INVERT_COLORS);
+            }
+            else {
+                printf(ANSI_RESET_COLORS);
+            }
+
             if (output_pane->items[line_idx].selected) {
                 strcpy(selector, "▶");
             }
             printf(ANSI_GOTO_POS "%s%s\n", i + 1, 1, selector, output_pane->items[line_idx].contents);
         }
-        
+
         output->needs_full_redraw = 0;
         output->last_displayed_count = pane_length;
         ui->separator_drawn = 0;
         ui->input_needs_refresh = 1;
     } else if (pane_length > output->last_displayed_count) {
         int lines_to_add = pane_length - output->last_displayed_count;
-        
+
         if (lines_to_add >= display_lines) {
             printf(ANSI_GOTO_POS, 1, 1);
             for (int i = 0; i < display_lines; i++) {
@@ -238,10 +248,10 @@ void draw_ui(ui_context_t *ui, const char *pattern, output_buffer_t *output) {
                 }
             }
         }
-        
+
         output->last_displayed_count = pane_length;
     }
-    
+
     if (!ui->separator_drawn) {
         printf(ANSI_GOTO_POS, ui->height - 2, 1);
         printf(ANSI_CLEAR_LINE);
@@ -250,25 +260,25 @@ void draw_ui(ui_context_t *ui, const char *pattern, output_buffer_t *output) {
         }
         ui->separator_drawn = 1;
     }
-    
+
     if (strcmp(ui->last_pattern, pattern) != 0 || ui->input_needs_refresh) {
         strncpy(ui->last_pattern, pattern, MAX_PATTERN_LEN - 1);
         ui->last_pattern[MAX_PATTERN_LEN - 1] = '\0';
         ui->input_needs_refresh = 0;
-        
+
         // Draw input buffer with ANSI escape sequences only when needed
         // Use only 2 lines: separator and input line
         printf(ANSI_GOTO_POS, ui->height - 1, 1);
         printf(ANSI_CLEAR_LINE);
         printf("| > %s", pattern);
-        // Fill remaining space 
+        // Fill remaining space
         int used_chars = 4 + strlen(pattern); // "| > " + pattern
         for (int i = used_chars; i < ui->width - 1; i++) {
             printf(" ");
         }
         printf("|");
     }
-    
+
     fflush(stdout);
 }
 
@@ -281,25 +291,25 @@ void execute_grep(const char *pattern, output_buffer_t *output, grep_state_t *gr
     if (strlen(pattern) == 0) {
         return;
     }
-    
+
     kill_current_grep(grep_state);
     line_list_clear(output->line_list);
     output->needs_full_redraw = 1;
-    
+
     int pipefd[2];
     if (pipe(pipefd) == -1) {
         return;
     }
-    
+
     pid_t pid = fork();
     if (pid == -1) {
-        // Fork failed 
+        // Fork failed
         close(pipefd[0]);
         close(pipefd[1]);
         printf("Failed to fork process!");
         return;
     }
-    
+
     if (pid == 0) {
         grep_process(pipefd, pattern, grep_command);
     } else {
@@ -338,14 +348,14 @@ void handle_grep_results_if_any(int *pipefd, output_buffer_t *output){
  */
 void grep_process(int pipefd[2], const char pattern[], const char *command){
     close(pipefd[0]);
-    dup2(pipefd[1], STDOUT_FILENO); // duplicate file descriptor of stdout and err 
+    dup2(pipefd[1], STDOUT_FILENO); // duplicate file descriptor of stdout and err
     dup2(pipefd[1], STDERR_FILENO); // to the input side of the pipe
     close(pipefd[1]);
-    
+
     // Build full command with pattern and current directory
     char full_command[1024];
     snprintf(full_command, sizeof(full_command), "%s \"%s\" .", command, pattern);
-   
+
     execl("/bin/sh", "sh", "-c", full_command, NULL);
     exit(1);
 }
@@ -356,22 +366,22 @@ void grep_process(int pipefd[2], const char pattern[], const char *command){
  * Returns -1 when user wants to exit (ESC), 0 otherwise
  * Triggers grep execution when Enter is pressed
  */
-int handle_input(char *pattern, grep_state_t *grep_state, output_buffer_t *output) {
+int handle_input(char *pattern, grep_state_t *grep_state, output_buffer_t *output, ui_context_t *ui) {
     int ch = getch();
     int pattern_len = strlen(pattern);
     int pattern_changed = 0;
-    
+
     if (ch == ERR) {
         return 0;
     }
-    
+
     switch (ch) {
         case 27: // ESC key
         case KEY_ENTER:
         case '\n':
         case '\r':
             return -1;
-            
+
         case KEY_BACKSPACE:
         case 127:
         case '\b':
@@ -381,11 +391,26 @@ int handle_input(char *pattern, grep_state_t *grep_state, output_buffer_t *outpu
             }
             break;
         case KEY_UP:
-            line_list_scroll_pane(output->line_list, -1);
+            if (output->cursor_position > 0) {
+                output->cursor_position--;
+                // Check if cursor is above the visible area and scroll up if needed
+                if (output->cursor_position < 0) {
+                    line_list_scroll_pane(output->line_list, -1);
+                    output->cursor_position = 0;
+                }
+            } else if (output->line_list->pane->position > 0) {
+                // Cursor is at top of pane, scroll up if possible
+                line_list_scroll_pane(output->line_list, -1);
+            }
             output->needs_full_redraw = true;
             break;
         case KEY_DOWN:
-            line_list_scroll_pane(output->line_list, 1);
+            if (output->cursor_position < ui->height) {
+                output->cursor_position++;
+            } else {
+                // Cursor is at bottom of visible area, scroll down if possible
+                line_list_scroll_pane(output->line_list, 1);
+            }
             output->needs_full_redraw = true;
             break;
         case ctrl('u'):
@@ -410,12 +435,12 @@ int handle_input(char *pattern, grep_state_t *grep_state, output_buffer_t *outpu
             }
             break;
     }
-    
+
     if (pattern_changed) {
         kill_current_grep(grep_state);
         update_keypress_time(grep_state);
     }
-    
+
     return 0;
 }
 
@@ -440,27 +465,26 @@ int should_execute_grep(const char *pattern, grep_state_t *grep_state) {
     if (strlen(pattern) == 0) {
         return 0;
     }
-    
+
     if (!grep_state->timer_active) {
         return 0;
     }
-    
+
     if (grep_state->current_grep_pid > 0) {
         return 0;
     }
-    
+
     struct timeval current_time;
     gettimeofday(&current_time, NULL);
-   
+
     // TODO does this really need to be this complicated?
     long elapsed_ms = (current_time.tv_sec - grep_state->last_keypress_time.tv_sec) * 1000 +
                       (current_time.tv_usec - grep_state->last_keypress_time.tv_usec) / 1000;
-    
+
     if (elapsed_ms >= TYPING_DELAY_MS) {
         grep_state->timer_active = 0;
         return 1;
     }
-    
+
     return 0;
 }
-
